@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Classroom Deadline Reminder</title>
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Firebase Compat SDKs (Simple Browser Version) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+    <div class="background-grid"></div>
+    
+    <div class="container">
+        <!-- Header -->
+        <header class="header-glass">
+            <h1 class="logo">Deadlines</h1>
+            <button id="login-btn" class="btn-primary">Google Login</button>
+        </header>
+
+        <!-- Main Dashboard -->
+        <main class="dashboard">
+            <section class="hero-section">
+                <h2>Never Miss A <span class="highlight">Deadline</span> Again</h2>
+                <p>Automatic recurring desktop & mobile screen reminders</p>
+            </section>
+
+            <!-- Deadline Cards Grid -->
+            <div id="deadlines-container" class="cards-grid">
+                <p style="color: #aaa; text-align: center; grid-column: 1/-1;">
+                    कृपया Google Classroom से असाइनमेंट लोड करने के लिए ऊपर "Google Login" बटन पर क्लिक करें।
+                </p>
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
