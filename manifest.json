@@ -1,13 +1,22 @@
 {
-  "background_color": "#ffffff",
-  "dir": "ltr",
-  "display": "standalone",
-  "name": "classroom-reminder.vercel",
-  "orientation": "any",
-  "scope": "/",
-  "short_name": "classroom-reminder.vercel",
+  "id": "classroom-reminder",
+  "name": "Classroom Reminder",
+  "short_name": "Classroom Reminder",
+  "description": "Classroom reminder - for every students.",
   "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
   "theme_color": "#ffffff",
-  "id": " classroom-reminder",
-  "description": "classroom-reminder- for every students ."
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
 }
