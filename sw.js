@@ -1,7 +1,12 @@
 self.addEventListener('install', (e) => {
   console.log('Service Worker Installed');
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (e) => {
+  console.log('Service Worker Activated');
 });
 
 self.addEventListener('fetch', (event) => {
-  // बेसिक कैशिंग/ऑफ़लाइन सपोर्ट के लिए
+  // बेसिक फ़ेच हैंडलर
 });
