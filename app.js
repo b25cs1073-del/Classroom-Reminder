@@ -144,6 +144,7 @@ function displayDeadlineCard(work, courseName) {
     deadlinesContainer.insertAdjacentHTML('beforeend', cardHtml);
 }
 
+// Service Worker-backed Background Smart Reminder
 function enableSmartBellReminder(cardId, title, dueDateStr, tag, dueTimestamp) {
     const dueDateObj = new Date(dueTimestamp);
 
@@ -153,19 +154,40 @@ function enableSmartBellReminder(cardId, title, dueDateStr, tag, dueTimestamp) {
                 const prox = getProximityConfig(dueDateObj);
                 alert(`Reminder Activated for ${tag} "${title}"!`);
 
-                new Notification(`${tag} Reminder Set 🔔`, {
-                    body: `Assignment: "${title}"\nDue Date: ${dueDateStr}`,
-                    icon: 'https://cdn-icons-png.flaticon.com/512/2991/2991112.png'
-                });
+                // Service Worker Notifications (Background Enabled)
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.ready.then(reg => {
+                        reg.showNotification(`${tag} Reminder Set 🔔`, {
+                            body: `Assignment: "${title}"\nDue Date: ${dueDateStr}`,
+                            icon: 'https://cdn-icons-png.flaticon.com/512/2991/2991112.png',
+                            requireInteraction: true
+                        });
+                    });
+                } else {
+                    new Notification(`${tag} Reminder Set 🔔`, {
+                        body: `Assignment: "${title}"\nDue Date: ${dueDateStr}`,
+                        icon: 'https://cdn-icons-png.flaticon.com/512/2991/2991112.png'
+                    });
+                }
 
                 if (activeIntervals[cardId]) clearInterval(activeIntervals[cardId]);
 
                 activeIntervals[cardId] = setInterval(() => {
                     const currentProx = getProximityConfig(dueDateObj);
-                    new Notification(`${tag} ${currentProx.soundText}`, {
-                        body: `Reminder: Due date for "${title}" is ${dueDateStr}`,
-                        requireInteraction: true
-                    });
+                    if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.ready.then(reg => {
+                            reg.showNotification(`${tag} ${currentProx.soundText}`, {
+                                body: `Reminder: Due date for "${title}" is ${dueDateStr}`,
+                                icon: 'https://cdn-icons-png.flaticon.com/512/2991/2991112.png',
+                                requireInteraction: true
+                            });
+                        });
+                    } else {
+                        new Notification(`${tag} ${currentProx.soundText}`, {
+                            body: `Reminder: Due date for "${title}" is ${dueDateStr}`,
+                            requireInteraction: true
+                        });
+                    }
                 }, prox.intervalMs);
 
                 document.getElementById(`btn_container_${cardId}`).innerHTML = `
@@ -215,6 +237,22 @@ const academicCalendarData = [
     { type: 'holiday', title: 'Winter Break', date: '2026-12-02', detail: '02-30 Dec 2026, Wed-Wed' }
 ];
 
+// 4. Academic Calendar Toggle (Expand/Collapse Logic)
+function toggleAcademicHub() {
+    const content = document.getElementById('academic-content');
+    const icon = document.getElementById('toggle-icon');
+    
+    if (content.classList.contains('hidden')) {
+        content.classList.remove('hidden');
+        content.style.display = 'block';
+        icon.style.transform = 'rotate(180deg)';
+    } else {
+        content.classList.add('hidden');
+        content.style.display = 'none';
+        icon.style.transform = 'rotate(0deg)';
+    }
+}
+
 function renderAcademicCalendar(events) {
     academicContainer.innerHTML = '';
     if (events.length === 0) {
@@ -235,6 +273,10 @@ function renderAcademicCalendar(events) {
 }
 
 function filterCalendar(category) {
+    const filterBtns = document.querySelectorAll('.filter-btn');
+    filterBtns.forEach(btn => btn.classList.remove('active'));
+    if (event && event.target) event.target.classList.add('active');
+
     if (category === 'all') renderAcademicCalendar(academicCalendarData);
     else renderAcademicCalendar(academicCalendarData.filter(e => e.type === category));
 }

@@ -1,4 +1,4 @@
- :root {
+:root {
     --bg-color: #080b08;
     --neon-green: #00ff66;
     --card-bg: rgba(20, 30, 20, 0.4);
@@ -76,6 +76,12 @@ body {
 .highlight {
     color: var(--neon-green);
     text-shadow: 0 0 10px rgba(0, 255, 102, 0.5);
+}
+
+.section-title {
+    margin-bottom: 15px;
+    color: #fff;
+    font-size: 1.3rem;
 }
 
 /* Cards Grid */
@@ -170,3 +176,41 @@ body {
     background: rgba(0, 255, 102, 0.1);
 }
 
+/* Academic Section & Toggle Styling */
+.academic-section {
+    background: rgba(15, 25, 15, 0.4);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 20px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.academic-header:hover h3 {
+    color: var(--neon-green);
+    transition: color 0.3s ease;
+}
+
+.filter-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #e0e0e0;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.3s ease;
+}
+
+.filter-btn.active, .filter-btn:hover {
+    background: var(--neon-green);
+    color: #000;
+    border-color: var(--neon-green);
+    font-weight: bold;
+    box-shadow: 0 0 10px rgba(0, 255, 102, 0.3);
+}
+
+/* Hidden Class (Academic Hub Expand/Collapse Fix) */
+.hidden {
+    display: none !important;
+}

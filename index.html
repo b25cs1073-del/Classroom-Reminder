@@ -37,31 +37,38 @@
                 </p>
             </div>
 
-            <!-- Academic Calendar Section -->
+            <!-- Academic Calendar Section (With Collapsible Toggle) -->
             <section class="academic-section" style="margin-top: 40px;">
-                <h3 class="section-title">📅 Academic Calendar & Time Table Adjustments</h3>
-                
-                <!-- Filters -->
-                <div class="filter-bar" style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
-                    <button class="filter-btn active" onclick="filterCalendar('all')">All Events</button>
-                    <button class="filter-btn" onclick="filterCalendar('exam')">Exams</button>
-                    <button class="filter-btn" onclick="filterCalendar('tt_swap')">Time Table Adjustments</button>
-                    <button class="filter-btn" onclick="filterCalendar('holiday')">Holidays & Breaks</button>
-                    <input type="date" id="calendar-date-picker" onchange="filterByDate(this.value)" style="padding: 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.5); color: white;">
+                <div class="academic-header" onclick="toggleAcademicHub()" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none;">
+                    <h3 class="section-title" style="margin: 0;">📅 Academic Calendar & Time Table Adjustments</h3>
+                    <span id="toggle-icon" style="color: #00ff66; font-size: 1.3rem; transition: transform 0.3s ease;">▼</span>
                 </div>
+                
+                <!-- Collapsible Content Container -->
+                <div id="academic-content" class="academic-content hidden" style="margin-top: 15px;">
+                    <!-- Filters -->
+                    <div class="filter-bar" style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                        <button class="filter-btn active" onclick="filterCalendar('all')">All Events</button>
+                        <button class="filter-btn" onclick="filterCalendar('exam')">Exams</button>
+                        <button class="filter-btn" onclick="filterCalendar('tt_swap')">Time Table Adjustments</button>
+                        <button class="filter-btn" onclick="filterCalendar('holiday')">Holidays & Breaks</button>
+                        <input type="date" id="calendar-date-picker" onchange="filterByDate(this.value)" style="padding: 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.5); color: white;">
+                    </div>
 
-                <div id="academic-calendar-container" class="cards-grid">
-                    <!-- Academic Events dynamically loaded here -->
+                    <div id="academic-calendar-container" class="cards-grid">
+                        <!-- Academic Events dynamically loaded here -->
+                    </div>
                 </div>
             </section>
         </main>
     </div>
 
+    <!-- Background Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js')
-                    .then(reg => console.log('Service Worker Registered!', reg))
+                    .then(reg => console.log('Service Worker Registered Successfully!', reg))
                     .catch(err => console.error('Service Worker Registration Failed!', err));
             });
         }
