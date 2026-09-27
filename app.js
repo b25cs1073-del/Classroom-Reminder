@@ -289,3 +289,106 @@ function filterByDate(selectedDate) {
 
 // Initial Render
 renderAcademicCalendar(academicCalendarData);
+
+
+
+// ----------------------------------------------------
+// 5. Gemini AI Attendance Tracker & Proxy Calculator
+// ----------------------------------------------------
+
+// Gemini API Key (यहाँ अपनी AI Studio वाली Key पेस्ट करें)
+const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY";
+
+// UI में AI Attendance Card इंसर्ट करना
+function renderAIAttendanceSection() {
+    const dashboard = document.querySelector('.dashboard');
+    const attendanceHtml = `
+        <section class="attendance-section glass-card" style="margin-top: 40px; padding: 20px; border: 1px solid rgba(0, 255, 102, 0.3);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 class="section-title" style="margin:0;">🤖 AI Attendance & Proxy Tracker (75% Criteria)</h3>
+                <span style="background: #00ff66; color: #000; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 12px;">Gemini AI Powered</span>
+            </div>
+            
+            <p style="color: #ccc; font-size: 0.9rem; margin-bottom: 15px;">
+                प्रोफेसर द्वारा भेजी गई अटेंडेंस PDF / Sheet का टेक्स्ट पेस्ट करें। AI तुरंत रोल नंबर के हिसाब से आपका 75% अटेंडेंस और Bunk/Proxy लिमिट बता देगा।
+            </p>
+
+            <div style="margin-bottom: 15px;">
+                <textarea id="attendance-text-input" placeholder="यहाँ अटेंडेंस लिस्ट / PDF का डेटा पेस्ट करें (उदा: Roll 21BCS001 - Present: 18/22)..." 
+                    style="width: 100%; height: 80px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 10px; border-radius: 8px; font-family: monospace;"></textarea>
+            </div>
+
+            <button class="btn-primary" onclick="analyzeAttendanceWithAI()" style="width: 100%; padding: 10px; font-size: 1rem;">
+                Analyze Attendance with Gemini AI 🚀
+            </button>
+
+            <div id="ai-attendance-result" style="margin-top: 20px;"></div>
+        </section>
+    `;
+    
+    // Academic Section से पहले इंसर्ट करें
+    const academicSection = document.querySelector('.academic-section');
+    if (academicSection) {
+        academicSection.insertAdjacentHTML('beforebegin', attendanceHtml);
+    }
+}
+
+// Gemini AI API को कॉल करने का फंक्शन
+async function analyzeAttendanceWithAI() {
+    const textInput = document.getElementById('attendance-text-input').value;
+    const resultDiv = document.getElementById('ai-attendance-result');
+
+    if (!textInput.trim()) {
+        alert("कृपया विश्लेषण के लिए अटेंडेंस का टेक्स्ट दर्ज करें।");
+        return;
+    }
+
+    resultDiv.innerHTML = `<p style="color:#00ff66; text-align:center;">🤖 AI आपके अटेंडेंस और 75% क्राइटेरिया का विश्लेषण कर रहा है...</p>`;
+
+    const prompt = `
+    Analyze the following attendance text/sheet data:
+    "${textInput}"
+
+    Calculate/Extract:
+    1. Subject/Course Name (if available)
+    2. Attendance Percentage (%)
+    3. Status relative to 75% mandatory criteria.
+    4. How many future classes can the student safely skip (proxies allowed) OR how many mandatory classes they must attend to reach 75%.
+
+    Format the output strictly in HTML with styling:
+    - If Attendance >= 75%: Show GREEN status with safe proxy count.
+    - If Attendance < 75%: Show RED Warning with required classes needed.
+    Keep it concise and clear.
+    `;
+
+    try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }]
+            })
+        });
+
+        const data = await response.json();
+        
+        if (data.candidates && data.candidates[0].content.parts[0].text) {
+            const aiReply = data.candidates[0].content.parts[0].text;
+            resultDiv.innerHTML = `
+                <div style="background: rgba(0,255,102,0.05); border: 1px solid #00ff66; padding: 15px; border-radius: 10px;">
+                    ${aiReply}
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `<p style="color:red;">AI रिस्पांस प्राप्त करने में समस्या आई।</p>`;
+        }
+    } catch (err) {
+        console.error("Gemini API Error:", err);
+        resultDiv.innerHTML = `<p style="color:red;">API Error: कृपया अपनी Gemini API Key जांचें।</p>`;
+    }
+}
+
+// DOM लोड होने के बाद AI कार्ड दिखाएं
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(renderAIAttendanceSection, 1000);
+});
