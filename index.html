@@ -1,16 +1,14 @@
 <!DOCTYPE html>
-<html lang="hi">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Classroom Deadline Reminder</title>
+    <title>Classroom Deadline & Academic Reminder</title>
     <link rel="stylesheet" href="style.css">
-    
-    <!-- PWA Manifest File Link -->
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#ffffff">
     
-    <!-- Firebase Compat SDKs (Simple Browser Version) -->
+    <!-- Firebase Compat SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 </head>
@@ -20,7 +18,7 @@
     <div class="container">
         <!-- Header -->
         <header class="header-glass">
-            <h1 class="logo">Deadlines</h1>
+            <h1 class="logo">Deadlines & Academic Hub</h1>
             <button id="login-btn" class="btn-primary">Google Login</button>
         </header>
 
@@ -28,19 +26,37 @@
         <main class="dashboard">
             <section class="hero-section">
                 <h2>Never Miss A <span class="highlight">Deadline</span> Again</h2>
-                <p>Automatic recurring desktop & mobile screen reminders</p>
+                <p>Automatic smart proximity reminders & academic schedule tracker</p>
             </section>
 
-            <!-- Deadline Cards Grid -->
+            <!-- Classroom Deadlines Section -->
+            <h3 class="section-title">📌 Google Classroom Deadlines</h3>
             <div id="deadlines-container" class="cards-grid">
                 <p style="color: #aaa; text-align: center; grid-column: 1/-1;">
-                    कृपया Google Classroom से असाइनमेंट लोड करने के लिए ऊपर "Google Login" बटन पर क्लिक करें।
+                    Please click "Google Login" button above to fetch assignments.
                 </p>
             </div>
+
+            <!-- Academic Calendar Section -->
+            <section class="academic-section" style="margin-top: 40px;">
+                <h3 class="section-title">📅 Academic Calendar & Time Table Adjustments</h3>
+                
+                <!-- Filters -->
+                <div class="filter-bar" style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                    <button class="filter-btn active" onclick="filterCalendar('all')">All Events</button>
+                    <button class="filter-btn" onclick="filterCalendar('exam')">Exams</button>
+                    <button class="filter-btn" onclick="filterCalendar('tt_swap')">Time Table Adjustments</button>
+                    <button class="filter-btn" onclick="filterCalendar('holiday')">Holidays & Breaks</button>
+                    <input type="date" id="calendar-date-picker" onchange="filterByDate(this.value)" style="padding: 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.5); color: white;">
+                </div>
+
+                <div id="academic-calendar-container" class="cards-grid">
+                    <!-- Academic Events dynamically loaded here -->
+                </div>
+            </section>
         </main>
     </div>
 
-    <!-- Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
@@ -50,7 +66,6 @@
             });
         }
     </script>
-
     <script src="app.js"></script>
 </body>
 </html>
