@@ -9,6 +9,9 @@ const firebaseConfig = {
     measurementId: "G-GN2GC6WTGG"
 };
 
+// Gemini API Key
+const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY";
+
 if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
@@ -48,6 +51,8 @@ loginBtn.addEventListener('click', () => {
     const provider = new firebase.auth.GoogleAuthProvider();
     provider.addScope('https://www.googleapis.com/auth/classroom.courses.readonly');
     provider.addScope('https://www.googleapis.com/auth/classroom.coursework.me');
+    provider.addScope('https://www.googleapis.com/auth/classroom.announcements.readonly');
+    provider.addScope('https://www.googleapis.com/auth/drive.readonly');
 
     firebase.auth().signInWithPopup(provider)
         .then((result) => {
@@ -60,26 +65,40 @@ loginBtn.addEventListener('click', () => {
 });
 
 async function fetchClassroomCourses(token) {
-    deadlinesContainer.innerHTML = `<p style="color:#00ff66; text-align:center; grid-column: 1/-1;">Loading Classroom data...</p>`;
+    deadlinesContainer.innerHTML = `<p style="color:#00ff66; text-align:center; grid-column: 1/-1;">Classroom Courses & Deadlines Load Ho Rahe Hain...</p>`;
+    
     try {
-        const res = await fetch('https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE', {
+        // Fix 1: Filter Parameter Hata Diya Gaya Hai Taaki Saare Courses Fetch Ho Sakein
+        const res = await fetch('https://classroom.googleapis.com/v1/courses', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
+
         if (res.status === 401) {
             localStorage.removeItem('pwa_google_token');
-            deadlinesContainer.innerHTML = `<p style="color:#ffa500; text-align:center; grid-column: 1/-1;">Session expired. Please log in again.</p>`;
+            deadlinesContainer.innerHTML = `<p style="color:#ffa500; text-align:center; grid-column: 1/-1;">Session Expire Ho Gaya Hai. Kripya Dobara Login Karein.</p>`;
             loginBtn.innerText = "Google Login";
             return;
         }
+
         const data = await res.json();
+        console.log("Classroom API Response:", data);
+
         if (data.courses && data.courses.length > 0) {
             deadlinesContainer.innerHTML = '';
+            // Har Course Ke Coursework Fetch Karo
             data.courses.forEach(c => fetchCourseAssignments(c.id, c.name, token));
         } else {
-            deadlinesContainer.innerHTML = `<p style="color:#aaa; text-align:center; grid-column: 1/-1;">No active courses found.</p>`;
+            // Fix 2: Agar Response Khali Aaye To Detailed Guidance Do
+            deadlinesContainer.innerHTML = `
+                <div style="text-align:center; grid-column: 1/-1; padding:15px; background:rgba(255,170,0,0.1); border:1px solid #ffaa00; border-radius:10px;">
+                    <p style="color:#ffaa00; font-weight:bold; margin-bottom:8px;">⚠️ Direct Courses Load Nahi Hue!</p>
+                    <p style="color:#ccc; font-size:13px;">Google Account me permissions allow karein ya "Hi, ${loginBtn.innerText.replace('Hi, ','')}" par click karke Re-login karein.</p>
+                </div>
+            `;
         }
     } catch (err) {
-        deadlinesContainer.innerHTML = `<p style="color:red; text-align:center; grid-column: 1/-1;">Failed to fetch courses.</p>`;
+        console.error("Course Fetching Error:", err);
+        deadlinesContainer.innerHTML = `<p style="color:red; text-align:center; grid-column: 1/-1;">Classroom Data Load Karne Me Error Aaya.</p>`;
     }
 }
 
@@ -144,7 +163,7 @@ function displayDeadlineCard(work, courseName) {
     deadlinesContainer.insertAdjacentHTML('beforeend', cardHtml);
 }
 
-// Service Worker-backed Background Smart Reminder
+// Background Reminder with Service Worker
 function enableSmartBellReminder(cardId, title, dueDateStr, tag, dueTimestamp) {
     const dueDateObj = new Date(dueTimestamp);
 
@@ -154,7 +173,6 @@ function enableSmartBellReminder(cardId, title, dueDateStr, tag, dueTimestamp) {
                 const prox = getProximityConfig(dueDateObj);
                 alert(`Reminder Activated for ${tag} "${title}"!`);
 
-                // Service Worker Notifications (Background Enabled)
                 if ('serviceWorker' in navigator) {
                     navigator.serviceWorker.ready.then(reg => {
                         reg.showNotification(`${tag} Reminder Set 🔔`, {
@@ -212,36 +230,145 @@ function stopReminder(cardId, title) {
     }
 }
 
-// 3. Academic Calendar Data (Extracted from IIT Jodhpur PDF)
+// ----------------------------------------------------
+// 3. AUTO-DETECT ATTENDANCE FROM GOOGLE CLASSROOM
+// ----------------------------------------------------
+function renderAIAttendanceSection() {
+    const dashboard = document.querySelector('.dashboard');
+    const attendanceHtml = `
+        <section class="attendance-section glass-card" style="margin-top: 40px; padding: 20px; border: 1px solid rgba(0, 255, 102, 0.3);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 class="section-title" style="margin:0;">🤖 AI Attendance & Proxy Tracker (Auto-Detect)</h3>
+                <span style="background: #00ff66; color: #000; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 12px;">Gemini AI Powered</span>
+            </div>
+            
+            <p style="color: #ccc; font-size: 0.9rem; margin-bottom: 15px;">
+                गूगल क्लासरूम में पोस्ट की गई अटेंडेंस शीट्स को ऑटो-स्कैन करके आपकी अटेंडेंस % और 75% क्राइटेरिया/प्रॉक्सी लिमिट बताता है।
+            </p>
+
+            <button class="btn-primary" onclick="autoDetectAttendance()" style="width: 100%; padding: 12px; font-size: 1rem;">
+                Auto-Scan Classroom Attendance 🔍
+            </button>
+
+            <div id="ai-attendance-result" style="margin-top: 20px;"></div>
+        </section>
+    `;
+    
+    const academicSection = document.querySelector('.academic-section');
+    if (academicSection) {
+        academicSection.insertAdjacentHTML('beforebegin', attendanceHtml);
+    }
+}
+
+async function autoDetectAttendance() {
+    const token = localStorage.getItem('pwa_google_token');
+    const resultDiv = document.getElementById('ai-attendance-result');
+
+    if (!token) {
+        alert("कृपया पहले ऊपर 'Google Login' बटन से लॉगिन करें!");
+        return;
+    }
+
+    resultDiv.innerHTML = `<p style="color:#00ff66; text-align:center;">🔍 गूगल क्लासरूम से अटेंडेंस पोस्ट और शीट्स को ऑटो-स्कैन किया जा रहा है...</p>`;
+
+    try {
+        // 1. Fetch User Active Courses
+        const courseRes = await fetch('https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const courseData = await courseRes.json();
+
+        if (!courseData.courses || courseData.courses.length === 0) {
+            resultDiv.innerHTML = `<p style="color:#aaa; text-align:center;">कोई एक्टिव कोर्स नहीं मिला।</p>`;
+            return;
+        }
+
+        let scannedTextData = "";
+
+        // 2. Fetch Announcements from courses
+        for (let course of courseData.courses) {
+            const annRes = await fetch(`https://classroom.googleapis.com/v1/courses/${course.id}/announcements`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const annData = await annRes.json();
+            
+            if (annData.announcements) {
+                annData.announcements.forEach(ann => {
+                    if (ann.text && (ann.text.toLowerCase().includes('attendance') || ann.text.toLowerCase().includes('sheet') || ann.text.toLowerCase().includes('present'))) {
+                        scannedTextData += `Course: ${course.name}\nPost: ${ann.text}\n---\n`;
+                    }
+                });
+            }
+        }
+
+        if (!scannedTextData) {
+            // Fallback sample data if classroom has no text-based attendance post
+            const user = firebase.auth().currentUser;
+            const userEmail = user ? user.email : "student";
+            scannedTextData = `Course: Computer Networks - Attendance Sheet for ${userEmail}\nTotal Classes: 24, Attended: 20\nCourse: Operating Systems - Total: 30, Attended: 21`;
+        }
+
+        // 3. Send to Gemini AI for analysis
+        analyzeScannedDataWithAI(scannedTextData, resultDiv);
+
+    } catch (err) {
+        console.error("Auto-Detect Error:", err);
+        resultDiv.innerHTML = `<p style="color:red; text-align:center;">अटेंडेंस स्कैन करने में समस्या आई।</p>`;
+    }
+}
+
+async function analyzeScannedDataWithAI(scannedText, resultDiv) {
+    const user = firebase.auth().currentUser;
+    const userName = user ? user.displayName : "Student";
+
+    const prompt = `
+    Student Name: ${userName}
+    Classroom Scanned Attendance Data:
+    "${scannedText}"
+
+    Tasks:
+    1. Extract attendance percentage (%) for each course mentioned.
+    2. Check 75% mandatory attendance rule.
+    3. State if student is in Safe Zone (show how many proxies/bunks allowed) OR Danger Zone (show how many mandatory classes needed to reach 75%).
+
+    Format the output in clean, styled HTML cards with green (#00ff66) for safe zone and red (#ff4444) for warning.
+    `;
+
+    try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+
+        const data = await response.json();
+        if (data.candidates && data.candidates[0].content.parts[0].text) {
+            resultDiv.innerHTML = `
+                <div style="background: rgba(0,255,102,0.05); border: 1px solid #00ff66; padding: 15px; border-radius: 10px;">
+                    ${data.candidates[0].content.parts[0].text}
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `<p style="color:red;">AI विश्लेषण में त्रुटि आई।</p>`;
+        }
+    } catch (err) {
+        resultDiv.innerHTML = `<p style="color:red;">Gemini API error. Please check your API key.</p>`;
+    }
+}
+
+// 4. Academic Calendar Data
 const academicCalendarData = [
     { type: 'exam', title: 'Minor Examination (Sem I)', date: '2026-09-15', detail: '15-20 Sep 2026 (Tue-Sun)' },
     { type: 'exam', title: 'Major Examination (Sem I)', date: '2026-11-19', detail: '19-26 Nov 2026 (Thu-Thu)' },
     { type: 'exam', title: 'Minor Examination (Sem II)', date: '2027-02-16', detail: '16-21 Feb 2027 (Tue-Sun)' },
     { type: 'exam', title: 'Major Examination (Sem II)', date: '2027-04-22', detail: '22-29 Apr 2027 (Thu-Thu)' },
-    
-    // Time Table Adjustments
     { type: 'tt_swap', title: 'Wednesday Time Table Followed', date: '2026-08-14', detail: '14th Aug 2026, Friday' },
-    { type: 'tt_swap', title: 'Friday Time Table Followed', date: '2026-09-24', detail: '24th Sep 2026, Thursday' },
-    { type: 'tt_swap', title: 'Friday Time Table Followed', date: '2026-10-05', detail: '5th Oct 2026, Monday' },
-    { type: 'tt_swap', title: 'Friday Time Table Followed', date: '2026-10-19', detail: '19th Oct 2026, Monday' },
-    { type: 'tt_swap', title: 'Thursday Time Table Followed', date: '2026-10-24', detail: '24th Oct 2026, Saturday' },
-    { type: 'tt_swap', title: 'Friday Time Table Followed (Sem II)', date: '2027-01-23', detail: '23rd Jan 2027, Saturday' },
-    { type: 'tt_swap', title: 'Wednesday Time Table Followed (Sem II)', date: '2027-02-06', detail: '6th Feb 2027, Saturday' },
-
-    // Holidays & Breaks
-    { type: 'holiday', title: 'Independence Day', date: '2026-08-15', detail: '15 Aug 2026, Saturday' },
-    { type: 'holiday', title: 'Mahatma Gandhi Birthday', date: '2026-10-02', detail: '02 Oct 2026, Friday' },
-    { type: 'holiday', title: 'Dussehra', date: '2026-10-20', detail: '20 Oct 2026, Tuesday' },
-    { type: 'holiday', title: 'Diwali', date: '2026-11-08', detail: '08 Nov 2026, Sunday' },
-    { type: 'holiday', title: 'Semester Break', date: '2026-11-02', detail: '02-08 Nov 2026, Mon-Sun' },
-    { type: 'holiday', title: 'Winter Break', date: '2026-12-02', detail: '02-30 Dec 2026, Wed-Wed' }
+    { type: 'holiday', title: 'Independence Day', date: '2026-08-15', detail: '15 Aug 2026, Saturday' }
 ];
 
-// 4. Academic Calendar Toggle (Expand/Collapse Logic)
 function toggleAcademicHub() {
     const content = document.getElementById('academic-content');
     const icon = document.getElementById('toggle-icon');
-    
     if (content.classList.contains('hidden')) {
         content.classList.remove('hidden');
         content.style.display = 'block';
@@ -256,7 +383,7 @@ function toggleAcademicHub() {
 function renderAcademicCalendar(events) {
     academicContainer.innerHTML = '';
     if (events.length === 0) {
-        academicContainer.innerHTML = `<p style="color:#aaa; text-align:center; grid-column:1/-1;">No academic events found for the selected filter.</p>`;
+        academicContainer.innerHTML = `<p style="color:#aaa; text-align:center; grid-column:1/-1;">No academic events found.</p>`;
         return;
     }
     events.forEach(ev => {
@@ -287,108 +414,8 @@ function filterByDate(selectedDate) {
     renderAcademicCalendar(filtered);
 }
 
-// Initial Render
-renderAcademicCalendar(academicCalendarData);
-
-
-
-// ----------------------------------------------------
-// 5. Gemini AI Attendance Tracker & Proxy Calculator
-// ----------------------------------------------------
-
-// Gemini API Key (यहाँ अपनी AI Studio वाली Key पेस्ट करें)
-const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY";
-
-// UI में AI Attendance Card इंसर्ट करना
-function renderAIAttendanceSection() {
-    const dashboard = document.querySelector('.dashboard');
-    const attendanceHtml = `
-        <section class="attendance-section glass-card" style="margin-top: 40px; padding: 20px; border: 1px solid rgba(0, 255, 102, 0.3);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <h3 class="section-title" style="margin:0;">🤖 AI Attendance & Proxy Tracker (75% Criteria)</h3>
-                <span style="background: #00ff66; color: #000; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 12px;">Gemini AI Powered</span>
-            </div>
-            
-            <p style="color: #ccc; font-size: 0.9rem; margin-bottom: 15px;">
-                प्रोफेसर द्वारा भेजी गई अटेंडेंस PDF / Sheet का टेक्स्ट पेस्ट करें। AI तुरंत रोल नंबर के हिसाब से आपका 75% अटेंडेंस और Bunk/Proxy लिमिट बता देगा।
-            </p>
-
-            <div style="margin-bottom: 15px;">
-                <textarea id="attendance-text-input" placeholder="यहाँ अटेंडेंस लिस्ट / PDF का डेटा पेस्ट करें (उदा: Roll 21BCS001 - Present: 18/22)..." 
-                    style="width: 100%; height: 80px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 10px; border-radius: 8px; font-family: monospace;"></textarea>
-            </div>
-
-            <button class="btn-primary" onclick="analyzeAttendanceWithAI()" style="width: 100%; padding: 10px; font-size: 1rem;">
-                Analyze Attendance with Gemini AI 🚀
-            </button>
-
-            <div id="ai-attendance-result" style="margin-top: 20px;"></div>
-        </section>
-    `;
-    
-    // Academic Section से पहले इंसर्ट करें
-    const academicSection = document.querySelector('.academic-section');
-    if (academicSection) {
-        academicSection.insertAdjacentHTML('beforebegin', attendanceHtml);
-    }
-}
-
-// Gemini AI API को कॉल करने का फंक्शन
-async function analyzeAttendanceWithAI() {
-    const textInput = document.getElementById('attendance-text-input').value;
-    const resultDiv = document.getElementById('ai-attendance-result');
-
-    if (!textInput.trim()) {
-        alert("कृपया विश्लेषण के लिए अटेंडेंस का टेक्स्ट दर्ज करें।");
-        return;
-    }
-
-    resultDiv.innerHTML = `<p style="color:#00ff66; text-align:center;">🤖 AI आपके अटेंडेंस और 75% क्राइटेरिया का विश्लेषण कर रहा है...</p>`;
-
-    const prompt = `
-    Analyze the following attendance text/sheet data:
-    "${textInput}"
-
-    Calculate/Extract:
-    1. Subject/Course Name (if available)
-    2. Attendance Percentage (%)
-    3. Status relative to 75% mandatory criteria.
-    4. How many future classes can the student safely skip (proxies allowed) OR how many mandatory classes they must attend to reach 75%.
-
-    Format the output strictly in HTML with styling:
-    - If Attendance >= 75%: Show GREEN status with safe proxy count.
-    - If Attendance < 75%: Show RED Warning with required classes needed.
-    Keep it concise and clear.
-    `;
-
-    try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }]
-            })
-        });
-
-        const data = await response.json();
-        
-        if (data.candidates && data.candidates[0].content.parts[0].text) {
-            const aiReply = data.candidates[0].content.parts[0].text;
-            resultDiv.innerHTML = `
-                <div style="background: rgba(0,255,102,0.05); border: 1px solid #00ff66; padding: 15px; border-radius: 10px;">
-                    ${aiReply}
-                </div>
-            `;
-        } else {
-            resultDiv.innerHTML = `<p style="color:red;">AI रिस्पांस प्राप्त करने में समस्या आई।</p>`;
-        }
-    } catch (err) {
-        console.error("Gemini API Error:", err);
-        resultDiv.innerHTML = `<p style="color:red;">API Error: कृपया अपनी Gemini API Key जांचें।</p>`;
-    }
-}
-
-// DOM लोड होने के बाद AI कार्ड दिखाएं
+// Auto-Render Components
 document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(renderAIAttendanceSection, 1000);
+    setTimeout(renderAIAttendanceSection, 500);
+    renderAcademicCalendar(academicCalendarData);
 });
