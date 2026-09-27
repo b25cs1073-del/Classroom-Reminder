@@ -1,0 +1,13 @@
+{
+  "background_color": "#ffffff",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "classroom-reminder.vercel",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "classroom-reminder.vercel",
+  "start_url": "/",
+  "theme_color": "#ffffff",
+  "id": " classroom-reminder",
+  "description": "classroom-reminder- for every students ."
+}
