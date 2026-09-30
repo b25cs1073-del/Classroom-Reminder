@@ -9,7 +9,7 @@ const firebaseConfig = {
     measurementId: "G-GN2GC6WTGG"
 };
 
-// Gemini API Key (अपनी Key डालें)
+// Gemini API Key
 const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY";
 
 if (!firebase.apps.length) {
@@ -22,20 +22,37 @@ const academicContainer = document.getElementById('academic-calendar-container')
 
 let activeIntervals = {};
 
-// 2. Persistent Auth State
+// 2. Persistent Auth State & Redirect Result Handling
 firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(console.error);
 
-firebase.auth().onAuthStateChanged((user) => {
+// Process Access Token after OAuth Redirect fallback
+firebase.auth().getRedirectResult().then((result) => {
+    if (result && result.credential) {
+        const token = result.credential.accessToken;
+        localStorage.setItem('pwa_google_token', token);
+        if (firebase.auth().currentUser) {
+            loginBtn.innerText = `Hi, ${firebase.auth().currentUser.displayName.split(' ')[0]}`;
+            fetchClassroomCourses(token);
+            renderAIAttendanceSection();
+        }
+    }
+}).catch((error) => {
+    console.error("Redirect Authentication Error:", error);
+});
+
+firebase.auth().onAuthStateChanged(async (user) => {
     if (user) {
         loginBtn.innerText = `Hi, ${user.displayName.split(' ')[0]}`;
-        const token = localStorage.getItem('pwa_google_token');
-        if (token) fetchClassroomCourses(token);
+        let token = localStorage.getItem('pwa_google_token');
         
-        // केवल लॉगिन होने पर ही AI Attendance सेक्शन दिखाएं
+        if (token) {
+            fetchClassroomCourses(token);
+        }
+        
         renderAIAttendanceSection();
     } else {
         loginBtn.innerText = "Google Login";
-        removeAIAttendanceSection(); // लॉगेआउट होने पर AI सेक्शन छुपाएं
+        removeAIAttendanceSection();
     }
 });
 
@@ -64,8 +81,16 @@ loginBtn.addEventListener('click', () => {
             localStorage.setItem('pwa_google_token', token);
             loginBtn.innerText = `Hi, ${result.user.displayName.split(' ')[0]}`;
             fetchClassroomCourses(token);
+            renderAIAttendanceSection();
         })
-        .catch((err) => alert("Login Error: " + err.message));
+        .catch((err) => {
+            console.error("Login Error:", err);
+            if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
+                firebase.auth().signInWithRedirect(provider);
+            } else {
+                alert("Login Error: " + err.message);
+            }
+        });
 });
 
 async function fetchClassroomCourses(token) {
@@ -73,12 +98,20 @@ async function fetchClassroomCourses(token) {
     
     try {
         const res = await fetch('https://classroom.googleapis.com/v1/courses', {
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: { 
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/json'
+            }
         });
 
-        if (res.status === 401) {
+        if (res.status === 401 || res.status === 403) {
             localStorage.removeItem('pwa_google_token');
-            deadlinesContainer.innerHTML = `<p style="color:#ffa500; text-align:center; grid-column: 1/-1;">Session Expired. Kripya Dobara Login Karein.</p>`;
+            deadlinesContainer.innerHTML = `
+                <div style="text-align:center; grid-column: 1/-1; padding:15px; background:rgba(255,170,0,0.1); border:1px solid #ffaa00; border-radius:10px;">
+                    <p style="color:#ffaa00; font-weight:bold; margin-bottom:8px;">⚠️ Courses Could Not Be Loaded Directly!</p>
+                    <p style="color:#ccc; font-size:13px;">Please grant required permissions in your Google Account or click the "Hi" button to re-login.</p>
+                </div>
+            `;
             loginBtn.innerText = "Google Login";
             removeAIAttendanceSection();
             return;
@@ -92,14 +125,13 @@ async function fetchClassroomCourses(token) {
         } else {
             deadlinesContainer.innerHTML = `
                 <div style="text-align:center; grid-column: 1/-1; padding:15px; background:rgba(255,170,0,0.1); border:1px solid #ffaa00; border-radius:10px;">
-                    <p style="color:#ffaa00; font-weight:bold; margin-bottom:8px;">⚠️ Direct Courses Load Nahi Hue!</p>
-                    <p style="color:#ccc; font-size:13px;">Google Account me permissions allow karein ya "Hi" button par click karke Re-login karein.</p>
+                    <p style="color:#ffaa00; font-weight:bold; margin-bottom:8px;">⚠️ No Active Classroom Courses Found!</p>
                 </div>
             `;
         }
     } catch (err) {
         console.error("Course Fetching Error:", err);
-        deadlinesContainer.innerHTML = `<p style="color:red; text-align:center; grid-column: 1/-1;">Classroom Data Load Karne Me Error Aaya.</p>`;
+        deadlinesContainer.innerHTML = `<p style="color:red; text-align:center; grid-column: 1/-1;">Error occurred while loading Classroom data.</p>`;
     }
 }
 
@@ -245,7 +277,7 @@ function renderAIAttendanceSection() {
             </div>
             
             <p style="color: #ccc; font-size: 0.9rem; margin-bottom: 15px;">
-                गूगल क्लासरूम में पोस्ट की गई अटेंडेंस शीट्स को ऑटो-स्कैन करके आपकी अटेंडेंस % और 75% क्राइटेरिया/प्रॉक्सी लिमिट बताता है।
+                Automatically scans attendance sheets posted in Google Classroom to display your attendance percentage and 75% criteria/proxy limits.
             </p>
 
             <button class="btn-primary" onclick="autoDetectAttendance()" style="width: 100%; padding: 12px; font-size: 1rem;">
@@ -271,7 +303,7 @@ async function autoDetectAttendance() {
     const resultDiv = document.getElementById('ai-attendance-result');
 
     if (!token) {
-        alert("Kripya pehle Google Login karein!");
+        alert("Please login with Google first!");
         return;
     }
 
@@ -284,7 +316,7 @@ async function autoDetectAttendance() {
         const courseData = await courseRes.json();
 
         if (!courseData.courses || courseData.courses.length === 0) {
-            resultDiv.innerHTML = `<p style="color:#aaa; text-align:center;">Koi active course nahi mila.</p>`;
+            resultDiv.innerHTML = `<p style="color:#aaa; text-align:center;">No active courses found.</p>`;
             return;
         }
 
@@ -314,7 +346,7 @@ async function autoDetectAttendance() {
 
     } catch (err) {
         console.error("Auto-Detect Error:", err);
-        resultDiv.innerHTML = `<p style="color:red; text-align:center;">Attendance scan karne me samasya aayi.</p>`;
+        resultDiv.innerHTML = `<p style="color:red; text-align:center;">Error occurred while scanning attendance.</p>`;
     }
 }
 
@@ -353,7 +385,7 @@ async function analyzeScannedDataWithAI(scannedText, resultDiv) {
             resultDiv.innerHTML = `<p style="color:red;">AI analysis failed.</p>`;
         }
     } catch (err) {
-        resultDiv.innerHTML = `<p style="color:red;">Gemini API Error. Check API Key.</p>`;
+        resultDiv.innerHTML = `<p style="color:red;">Gemini API Error. Please check API Key.</p>`;
     }
 }
 
