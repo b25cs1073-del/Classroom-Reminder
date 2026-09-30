@@ -9,7 +9,7 @@ const firebaseConfig = {
     measurementId: "G-GN2GC6WTGG"
 };
 
-// Gemini API Key
+// Gemini API Key (अपनी Key डालें)
 const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY";
 
 if (!firebase.apps.length) {
@@ -30,8 +30,12 @@ firebase.auth().onAuthStateChanged((user) => {
         loginBtn.innerText = `Hi, ${user.displayName.split(' ')[0]}`;
         const token = localStorage.getItem('pwa_google_token');
         if (token) fetchClassroomCourses(token);
+        
+        // केवल लॉगिन होने पर ही AI Attendance सेक्शन दिखाएं
+        renderAIAttendanceSection();
     } else {
         loginBtn.innerText = "Google Login";
+        removeAIAttendanceSection(); // लॉगेआउट होने पर AI सेक्शन छुपाएं
     }
 });
 
@@ -65,34 +69,31 @@ loginBtn.addEventListener('click', () => {
 });
 
 async function fetchClassroomCourses(token) {
-    deadlinesContainer.innerHTML = `<p style="color:#00ff66; text-align:center; grid-column: 1/-1;">Classroom Courses & Deadlines Load Ho Rahe Hain...</p>`;
+    deadlinesContainer.innerHTML = `<p style="color:#00ff66; text-align:center; grid-column: 1/-1;">Loading Classroom Courses & Deadlines...</p>`;
     
     try {
-        // Fix 1: Filter Parameter Hata Diya Gaya Hai Taaki Saare Courses Fetch Ho Sakein
         const res = await fetch('https://classroom.googleapis.com/v1/courses', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
         if (res.status === 401) {
             localStorage.removeItem('pwa_google_token');
-            deadlinesContainer.innerHTML = `<p style="color:#ffa500; text-align:center; grid-column: 1/-1;">Session Expire Ho Gaya Hai. Kripya Dobara Login Karein.</p>`;
+            deadlinesContainer.innerHTML = `<p style="color:#ffa500; text-align:center; grid-column: 1/-1;">Session Expired. Kripya Dobara Login Karein.</p>`;
             loginBtn.innerText = "Google Login";
+            removeAIAttendanceSection();
             return;
         }
 
         const data = await res.json();
-        console.log("Classroom API Response:", data);
 
         if (data.courses && data.courses.length > 0) {
             deadlinesContainer.innerHTML = '';
-            // Har Course Ke Coursework Fetch Karo
             data.courses.forEach(c => fetchCourseAssignments(c.id, c.name, token));
         } else {
-            // Fix 2: Agar Response Khali Aaye To Detailed Guidance Do
             deadlinesContainer.innerHTML = `
                 <div style="text-align:center; grid-column: 1/-1; padding:15px; background:rgba(255,170,0,0.1); border:1px solid #ffaa00; border-radius:10px;">
                     <p style="color:#ffaa00; font-weight:bold; margin-bottom:8px;">⚠️ Direct Courses Load Nahi Hue!</p>
-                    <p style="color:#ccc; font-size:13px;">Google Account me permissions allow karein ya "Hi, ${loginBtn.innerText.replace('Hi, ','')}" par click karke Re-login karein.</p>
+                    <p style="color:#ccc; font-size:13px;">Google Account me permissions allow karein ya "Hi" button par click karke Re-login karein.</p>
                 </div>
             `;
         }
@@ -163,7 +164,6 @@ function displayDeadlineCard(work, courseName) {
     deadlinesContainer.insertAdjacentHTML('beforeend', cardHtml);
 }
 
-// Background Reminder with Service Worker
 function enableSmartBellReminder(cardId, title, dueDateStr, tag, dueTimestamp) {
     const dueDateObj = new Date(dueTimestamp);
 
@@ -231,12 +231,14 @@ function stopReminder(cardId, title) {
 }
 
 // ----------------------------------------------------
-// 3. AUTO-DETECT ATTENDANCE FROM GOOGLE CLASSROOM
+// 3. AI ATTENDANCE (ONLY VISIBLE WHEN LOGGED IN)
 // ----------------------------------------------------
 function renderAIAttendanceSection() {
-    const dashboard = document.querySelector('.dashboard');
+    if (document.getElementById('ai-attendance-section')) return;
+
+    const academicSection = document.querySelector('.academic-section');
     const attendanceHtml = `
-        <section class="attendance-section glass-card" style="margin-top: 40px; padding: 20px; border: 1px solid rgba(0, 255, 102, 0.3);">
+        <section id="ai-attendance-section" class="attendance-section glass-card" style="margin-top: 40px; padding: 20px; border: 1px solid rgba(0, 255, 102, 0.3);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                 <h3 class="section-title" style="margin:0;">🤖 AI Attendance & Proxy Tracker (Auto-Detect)</h3>
                 <span style="background: #00ff66; color: #000; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 12px;">Gemini AI Powered</span>
@@ -253,11 +255,15 @@ function renderAIAttendanceSection() {
             <div id="ai-attendance-result" style="margin-top: 20px;"></div>
         </section>
     `;
-    
-    const academicSection = document.querySelector('.academic-section');
+
     if (academicSection) {
         academicSection.insertAdjacentHTML('beforebegin', attendanceHtml);
     }
+}
+
+function removeAIAttendanceSection() {
+    const sec = document.getElementById('ai-attendance-section');
+    if (sec) sec.remove();
 }
 
 async function autoDetectAttendance() {
@@ -265,27 +271,24 @@ async function autoDetectAttendance() {
     const resultDiv = document.getElementById('ai-attendance-result');
 
     if (!token) {
-        alert("कृपया पहले ऊपर 'Google Login' बटन से लॉगिन करें!");
+        alert("Kripya pehle Google Login karein!");
         return;
     }
 
-    resultDiv.innerHTML = `<p style="color:#00ff66; text-align:center;">🔍 गूगल क्लासरूम से अटेंडेंस पोस्ट और शीट्स को ऑटो-स्कैन किया जा रहा है...</p>`;
+    resultDiv.innerHTML = `<p style="color:#00ff66; text-align:center;">🔍 Classroom Attendance Auto-Scanning In Progress...</p>`;
 
     try {
-        // 1. Fetch User Active Courses
-        const courseRes = await fetch('https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE', {
+        const courseRes = await fetch('https://classroom.googleapis.com/v1/courses', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const courseData = await courseRes.json();
 
         if (!courseData.courses || courseData.courses.length === 0) {
-            resultDiv.innerHTML = `<p style="color:#aaa; text-align:center;">कोई एक्टिव कोर्स नहीं मिला।</p>`;
+            resultDiv.innerHTML = `<p style="color:#aaa; text-align:center;">Koi active course nahi mila.</p>`;
             return;
         }
 
         let scannedTextData = "";
-
-        // 2. Fetch Announcements from courses
         for (let course of courseData.courses) {
             const annRes = await fetch(`https://classroom.googleapis.com/v1/courses/${course.id}/announcements`, {
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -302,18 +305,16 @@ async function autoDetectAttendance() {
         }
 
         if (!scannedTextData) {
-            // Fallback sample data if classroom has no text-based attendance post
             const user = firebase.auth().currentUser;
             const userEmail = user ? user.email : "student";
             scannedTextData = `Course: Computer Networks - Attendance Sheet for ${userEmail}\nTotal Classes: 24, Attended: 20\nCourse: Operating Systems - Total: 30, Attended: 21`;
         }
 
-        // 3. Send to Gemini AI for analysis
         analyzeScannedDataWithAI(scannedTextData, resultDiv);
 
     } catch (err) {
         console.error("Auto-Detect Error:", err);
-        resultDiv.innerHTML = `<p style="color:red; text-align:center;">अटेंडेंस स्कैन करने में समस्या आई।</p>`;
+        resultDiv.innerHTML = `<p style="color:red; text-align:center;">Attendance scan karne me samasya aayi.</p>`;
     }
 }
 
@@ -349,21 +350,51 @@ async function analyzeScannedDataWithAI(scannedText, resultDiv) {
                 </div>
             `;
         } else {
-            resultDiv.innerHTML = `<p style="color:red;">AI विश्लेषण में त्रुटि आई।</p>`;
+            resultDiv.innerHTML = `<p style="color:red;">AI analysis failed.</p>`;
         }
     } catch (err) {
-        resultDiv.innerHTML = `<p style="color:red;">Gemini API error. Please check your API key.</p>`;
+        resultDiv.innerHTML = `<p style="color:red;">Gemini API Error. Check API Key.</p>`;
     }
 }
 
-// 4. Academic Calendar Data
+// ----------------------------------------------------
+// 4. FULL ACADEMIC CALENDAR DATA (EXTRACTED FROM IIT JODHPUR PDF)
+// ----------------------------------------------------
 const academicCalendarData = [
+    // Exams
     { type: 'exam', title: 'Minor Examination (Sem I)', date: '2026-09-15', detail: '15-20 Sep 2026 (Tue-Sun)' },
     { type: 'exam', title: 'Major Examination (Sem I)', date: '2026-11-19', detail: '19-26 Nov 2026 (Thu-Thu)' },
     { type: 'exam', title: 'Minor Examination (Sem II)', date: '2027-02-16', detail: '16-21 Feb 2027 (Tue-Sun)' },
     { type: 'exam', title: 'Major Examination (Sem II)', date: '2027-04-22', detail: '22-29 Apr 2027 (Thu-Thu)' },
+
+    // Time Table Adjustments (General)
     { type: 'tt_swap', title: 'Wednesday Time Table Followed', date: '2026-08-14', detail: '14th Aug 2026, Friday' },
-    { type: 'holiday', title: 'Independence Day', date: '2026-08-15', detail: '15 Aug 2026, Saturday' }
+    { type: 'tt_swap', title: 'Friday Time Table Followed', date: '2026-09-24', detail: '24th Sep 2026, Thursday' },
+    { type: 'tt_swap', title: 'Friday Time Table Followed', date: '2026-10-05', detail: '5th Oct 2026, Monday' },
+    { type: 'tt_swap', title: 'Friday Time Table Followed', date: '2026-10-19', detail: '19th Oct 2026, Monday' },
+    { type: 'tt_swap', title: 'Thursday Time Table Followed', date: '2026-10-24', detail: '24th Oct 2026, Saturday' },
+    { type: 'tt_swap', title: 'Friday Time Table Followed (Sem II)', date: '2027-01-23', detail: '23rd Jan 2027, Saturday' },
+    { type: 'tt_swap', title: 'Wednesday Time Table Followed (Sem II)', date: '2027-02-06', detail: '6th Feb 2027, Saturday' },
+    { type: 'tt_swap', title: 'Tuesday Time Table Followed (Sem II)', date: '2027-04-17', detail: '17th Apr 2027, Saturday' },
+
+    // Time Table Adjustments (UG First Year Only)
+    { type: 'tt_swap', title: 'Thursday TT (UG First Year)', date: '2026-08-08', detail: '08th Aug 2026, Saturday' },
+    { type: 'tt_swap', title: 'Friday TT (UG First Year)', date: '2026-09-12', detail: '12th Sep 2026, Saturday' },
+    { type: 'tt_swap', title: 'Monday TT (UG First Year)', date: '2026-09-26', detail: '26th Sep 2026, Saturday' },
+    { type: 'tt_swap', title: 'Tuesday TT (UG First Year)', date: '2026-10-10', detail: '10th Oct 2026, Saturday' },
+
+    // Holidays & Breaks
+    { type: 'holiday', title: 'Independence Day', date: '2026-08-15', detail: '15 Aug 2026, Saturday' },
+    { type: 'holiday', title: 'Id-e-Milad (Prophet Birthday)', date: '2026-08-26', detail: '26 Aug 2026, Wednesday' },
+    { type: 'holiday', title: 'Janmashtami', date: '2026-09-04', detail: '04 Sep 2026, Friday' },
+    { type: 'holiday', title: 'Mahatma Gandhi Birthday', date: '2026-10-02', detail: '02 Oct 2026, Friday' },
+    { type: 'holiday', title: 'Dussehra (Vijay Dashmi)', date: '2026-10-20', detail: '20 Oct 2026, Tuesday' },
+    { type: 'holiday', title: 'Diwali (Deepavali)', date: '2026-11-08', detail: '08 Nov 2026, Sunday' },
+    { type: 'holiday', title: 'Guru Nanak Birthday', date: '2026-11-24', detail: '24 Nov 2026, Tuesday' },
+    { type: 'holiday', title: 'Christmas Day', date: '2026-12-25', detail: '25 Dec 2026, Friday' },
+    { type: 'holiday', title: 'Semester Break', date: '2026-11-02', detail: '02-08 Nov 2026, Mon-Sun' },
+    { type: 'holiday', title: 'Winter Break', date: '2026-12-02', detail: '02-30 Dec 2026, Wed-Wed' },
+    { type: 'holiday', title: 'Summer Break', date: '2027-05-03', detail: '03 May - 29 July 2027' }
 ];
 
 function toggleAcademicHub() {
@@ -383,7 +414,7 @@ function toggleAcademicHub() {
 function renderAcademicCalendar(events) {
     academicContainer.innerHTML = '';
     if (events.length === 0) {
-        academicContainer.innerHTML = `<p style="color:#aaa; text-align:center; grid-column:1/-1;">No academic events found.</p>`;
+        academicContainer.innerHTML = `<p style="color:#aaa; text-align:center; grid-column:1/-1;">No academic events found for selected filter.</p>`;
         return;
     }
     events.forEach(ev => {
@@ -414,8 +445,7 @@ function filterByDate(selectedDate) {
     renderAcademicCalendar(filtered);
 }
 
-// Auto-Render Components
+// Initial Auto-Render
 document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(renderAIAttendanceSection, 500);
     renderAcademicCalendar(academicCalendarData);
 });
