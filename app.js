@@ -25,7 +25,7 @@ let activeIntervals = {};
 // 2. Persistent Auth State & Redirect Result Handling
 firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(console.error);
 
-// Process Access Token after OAuth Redirect fallback
+// Handle Auth Redirect Fallback
 firebase.auth().getRedirectResult().then((result) => {
     if (result && result.credential) {
         const token = result.credential.accessToken;
@@ -40,15 +40,13 @@ firebase.auth().getRedirectResult().then((result) => {
     console.error("Redirect Authentication Error:", error);
 });
 
-firebase.auth().onAuthStateChanged(async (user) => {
+firebase.auth().onAuthStateChanged((user) => {
     if (user) {
         loginBtn.innerText = `Hi, ${user.displayName.split(' ')[0]}`;
-        let token = localStorage.getItem('pwa_google_token');
+        const token = localStorage.getItem('pwa_google_token');
+        if (token) fetchClassroomCourses(token);
         
-        if (token) {
-            fetchClassroomCourses(token);
-        }
-        
+        // Render AI Attendance Section only when logged in
         renderAIAttendanceSection();
     } else {
         loginBtn.innerText = "Google Login";
@@ -104,12 +102,23 @@ async function fetchClassroomCourses(token) {
             }
         });
 
-        if (res.status === 401 || res.status === 403) {
+        if (res.status === 403) {
+            console.error("403 Forbidden Response from Google API.");
+            deadlinesContainer.innerHTML = `
+                <div style="text-align:center; grid-column: 1/-1; padding:15px; background:rgba(255,170,0,0.1); border:1px solid #ffaa00; border-radius:10px;">
+                    <p style="color:#ffaa00; font-weight:bold; margin-bottom:8px;">⚠️ Classroom API Access Restricted (403)</p>
+                    <p style="color:#ccc; font-size:13px;">If using a college email ID, your institutional administrator may restrict third-party API access. Try re-logging in and approving all permissions.</p>
+                </div>
+            `;
+            return;
+        }
+
+        if (res.status === 401) {
             localStorage.removeItem('pwa_google_token');
             deadlinesContainer.innerHTML = `
                 <div style="text-align:center; grid-column: 1/-1; padding:15px; background:rgba(255,170,0,0.1); border:1px solid #ffaa00; border-radius:10px;">
-                    <p style="color:#ffaa00; font-weight:bold; margin-bottom:8px;">⚠️ Courses Could Not Be Loaded Directly!</p>
-                    <p style="color:#ccc; font-size:13px;">Please grant required permissions in your Google Account or click the "Hi" button to re-login.</p>
+                    <p style="color:#ffaa00; font-weight:bold; margin-bottom:8px;">⚠️ Session Expired</p>
+                    <p style="color:#ccc; font-size:13px;">Please click "Google Login" to refresh permissions.</p>
                 </div>
             `;
             loginBtn.innerText = "Google Login";
@@ -481,3 +490,88 @@ function filterByDate(selectedDate) {
 document.addEventListener('DOMContentLoaded', () => {
     renderAcademicCalendar(academicCalendarData);
 });
+
+// XXXX
+// ----------------------------------------------------
+// 5. GREEN PARTICLE THREAD NETWORK CANVAS ANIMATION
+// ----------------------------------------------------
+const canvas = document.getElementById('bg-canvas');
+const ctx = canvas.getContext('2d');
+
+let particlesArray = [];
+let width = canvas.width = window.innerWidth;
+let height = canvas.height = window.innerHeight;
+
+window.addEventListener('resize', () => {
+    width = canvas.width = window.innerWidth;
+    height = canvas.height = window.innerHeight;
+    init();
+});
+
+class Particle {
+    constructor() {
+        this.x = Math.random() * width;
+        this.y = Math.random() * height;
+        this.size = Math.random() * 2 + 1;
+        this.speedX = (Math.random() - 0.5) * 0.8;
+        this.speedY = (Math.random() - 0.5) * 0.8;
+    }
+
+    update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
+
+        if (this.x < 0 || this.x > width) this.speedX *= -1;
+        if (this.y < 0 || this.y > height) this.speedY *= -1;
+    }
+
+    draw() {
+        ctx.fillStyle = '#00ff66';
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = '#00ff66';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+function init() {
+    particlesArray = [];
+    const numberOfParticles = Math.floor((width * height) / 12000);
+    for (let i = 0; i < numberOfParticles; i++) {
+        particlesArray.push(new Particle());
+    }
+}
+
+function connect() {
+    for (let a = 0; a < particlesArray.length; a++) {
+        for (let b = a; b < particlesArray.length; b++) {
+            let dx = particlesArray[a].x - particlesArray[b].x;
+            let dy = particlesArray[a].y - particlesArray[b].y;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < 110) {
+                let opacity = 1 - (distance / 110);
+                ctx.strokeStyle = `rgba(0, 255, 102, ${opacity * 0.35})`;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(particlesArray[a].x, particlesArray[a].y);
+                ctx.lineTo(particlesArray[b].x, particlesArray[b].y);
+                ctx.stroke();
+            }
+        }
+    }
+}
+
+function animate() {
+    ctx.clearRect(0, 0, width, height);
+    for (let i = 0; i < particlesArray.length; i++) {
+        particlesArray[i].update();
+        particlesArray[i].draw();
+    }
+    connect();
+    requestAnimationFrame(animate);
+}
+
+init();
+animate();
