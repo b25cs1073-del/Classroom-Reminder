@@ -22,6 +22,34 @@ let tokenClient;
 // Valid Google Cloud OAuth Client ID
 const GOOGLE_CLIENT_ID = '1082578755240-i9r82cd0kgg7e8j6hgrgb9lihhjcfglp.apps.googleusercontent.com';
 
+// Built-in "Tum-Tum-Tum-Tum" Bell Ringtone Synthesizer (No MP3 needed)
+function playBellRingtone() {
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioCtx();
+        const notes = [523.25, 659.25, 783.99, 1046.50]; // Tum - Tum - Tum - Tum chime
+
+        notes.forEach((freq, index) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime + index * 0.22);
+
+            gain.gain.setValueAtTime(0.001, audioCtx.currentTime + index * 0.22);
+            gain.gain.exponentialRampToValueAtTime(0.4, audioCtx.currentTime + index * 0.22 + 0.04);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + index * 0.22 + 0.35);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.start(audioCtx.currentTime + index * 0.22);
+            osc.stop(audioCtx.currentTime + index * 0.22 + 0.36);
+        });
+    } catch (e) {
+        console.warn("Audio play blocked until user interaction:", e);
+    }
+}
+
 function initGoogleAuthClient() {
     if (window.google && google.accounts && google.accounts.oauth2) {
         tokenClient = google.accounts.oauth2.initTokenClient({
@@ -139,10 +167,19 @@ async function fetchCourseAssignments(courseId, courseName, token) {
             data.courseWork.forEach(work => {
                 if (work.dueDate) {
                     const due = work.dueDate;
-                    const dueTime = work.dueTime || { hours: 23, minutes: 59 };
-                    const dueDateObj = new Date(due.year, due.month - 1, due.day, dueTime.hours || 23, dueTime.minutes || 59);
+                    let dueDateObj;
 
-                    // Filter out past/expired deadlines - show ONLY future/upcoming ones
+                    if (work.dueTime && (work.dueTime.hours !== undefined || work.dueTime.minutes !== undefined)) {
+                        // Google Classroom sends dueTime in UTC -> Convert accurately to Local IST
+                        const utcHours = work.dueTime.hours || 0;
+                        const utcMinutes = work.dueTime.minutes || 0;
+                        dueDateObj = new Date(Date.UTC(due.year, due.month - 1, due.day, utcHours, utcMinutes));
+                    } else {
+                        // If no specific time was set in Classroom, default to 23:59 Local Time
+                        dueDateObj = new Date(due.year, due.month - 1, due.day, 23, 59);
+                    }
+
+                    // Show ONLY upcoming deadlines
                     if (dueDateObj > now) {
                         displayDeadlineCard(work, courseName, dueDateObj);
                         foundCount++;
@@ -173,28 +210,25 @@ function getProximityConfig(dueDateObj) {
     if (diffHours <= 0) {
         return { soundText: '🚨 EXPIRED', intervalMs: 0, status: 'EXPIRED' };
     } else if (diffHours <= 1) {
-        // Last 1 hour: Ring every 15 minutes
         return { soundText: '🔥 URGENT: Less than 1 Hour Left!', intervalMs: 15 * 60 * 1000, status: 'CRITICAL' };
     } else if (diffHours <= 5) {
-        // 1 to 5 hours left: Ring every 30 minutes
         return { soundText: '⚠️ WARNING: Final 5 Hours Left!', intervalMs: 30 * 60 * 1000, status: 'HIGH' };
     } else if (diffHours <= 12) {
-        // 5 to 12 hours left: Ring every 2 hours
         return { soundText: '⏰ REMINDER: Submission Due Today', intervalMs: 2 * 60 * 60 * 1000, status: 'MEDIUM_HIGH' };
     } else if (diffHours <= 24) {
-        // 12 to 24 hours left: Ring every 12 hours
         return { soundText: '🔔 UPCOMING: Due Tomorrow', intervalMs: 12 * 60 * 60 * 1000, status: 'MEDIUM' };
     } else if (diffDays <= 5) {
-        // 1 to 5 days left: Ring once every 24 hours
         return { soundText: '📅 NOTICE: Due in a few days', intervalMs: 24 * 60 * 60 * 1000, status: 'LOW' };
     } else {
-        // More than 5 days left: Ring once every 2 days (48 hours)
         return { soundText: 'ℹ️ ADVANCE NOTICE: Submission Ahead', intervalMs: 48 * 60 * 60 * 1000, status: 'INFO' };
     }
 }
 
 function displayDeadlineCard(work, courseName, dueDateObj) {
-    const dueDateStr = `${dueDateObj.getDate()}/${dueDateObj.getMonth() + 1}/${dueDateObj.getFullYear()} (${dueDateObj.getHours()}:${String(dueDateObj.getMinutes()).padStart(2, '0')})`;
+    const hours = String(dueDateObj.getHours()).padStart(2, '0');
+    const minutes = String(dueDateObj.getMinutes()).padStart(2, '0');
+    const dueDateStr = `${dueDateObj.getDate()}/${dueDateObj.getMonth() + 1}/${dueDateObj.getFullYear()} (${hours}:${minutes})`;
+    
     const typeInfo = getAssignmentTypeBadge(work.title);
     const cardId = `card_${work.id || Math.random().toString(36).substr(2, 9)}`;
 
@@ -222,6 +256,9 @@ function displayDeadlineCard(work, courseName, dueDateObj) {
 function enableSmartBellReminder(cardId, title, dueDateStr, tag, dueTimestamp) {
     const dueDateObj = new Date(dueTimestamp);
 
+    // Play ringtone immediately on button click so audio permission unlocks & demo works
+    playBellRingtone();
+
     if ("Notification" in window) {
         Notification.requestPermission().then(permission => {
             if (permission === "granted") {
@@ -232,9 +269,7 @@ function enableSmartBellReminder(cardId, title, dueDateStr, tag, dueTimestamp) {
                     return;
                 }
 
-                alert(`Smart Proximity Bell Activated for ${tag} "${title}"! Frequency set based on due time.`);
-
-                // Initial Instant Popup Notification
+                // Trigger instant popup notification + sound
                 triggerNotification(tag, prox.soundText, title, dueDateStr);
 
                 if (activeIntervals[cardId]) clearInterval(activeIntervals[cardId]);
@@ -247,6 +282,7 @@ function enableSmartBellReminder(cardId, title, dueDateStr, tag, dueTimestamp) {
                         clearInterval(activeIntervals[cardId]);
                         delete activeIntervals[cardId];
                     } else {
+                        playBellRingtone();
                         triggerNotification(tag, currentProx.soundText, title, dueDateStr);
                     }
                 }, prox.intervalMs);
@@ -258,7 +294,7 @@ function enableSmartBellReminder(cardId, title, dueDateStr, tag, dueTimestamp) {
                     </button>
                 `;
             } else {
-                alert("Please allow notification permissions in your browser.");
+                alert("Please allow notification permissions in your browser address bar (lock icon).");
             }
         });
     }
@@ -268,14 +304,15 @@ function triggerNotification(tag, header, title, dueDateStr) {
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.ready.then(reg => {
             reg.showNotification(`${tag} ${header}`, {
-                body: `Assignment: "${title}"\nDeadline: ${dueDateStr}`,
+                body: `DEADLINE ALERT: "${title}"\nDue: ${dueDateStr}`,
                 icon: 'https://cdn-icons-png.flaticon.com/512/2991/2991112.png',
+                vibrate: [300, 100, 300, 100, 300],
                 requireInteraction: true
             });
         });
     } else {
         new Notification(`${tag} ${header}`, {
-            body: `Assignment: "${title}"\nDeadline: ${dueDateStr}`,
+            body: `DEADLINE ALERT: "${title}"\nDue: ${dueDateStr}`,
             icon: 'https://cdn-icons-png.flaticon.com/512/2991/2991112.png'
         });
     }
